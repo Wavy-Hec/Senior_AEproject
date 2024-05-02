@@ -1,12 +1,14 @@
 
 import gym
-from stable_baselines3 import PPO
+from stable_baselines3 import SAC
 import datetime
 import numpy as np
+from custom.envs.humanoid_v4 import *
 
 # Create the environment
 
-env = gym.make("custom:Ant2-v4", render_mode="rgb_array")
+# env = gym.make([Human2Env], render_mode="rgb_array")
+env = Human2Env(numFeatures=200)
 
 # Learning rate schedule: linearly decreasing from 0.0007 to 0.0001
 def linear_lr(progress_remaining: float):
@@ -15,18 +17,18 @@ def linear_lr(progress_remaining: float):
     return end_lr + (start_lr - end_lr) * progress_remaining
 
 # Initialize the PPO model with the learning rate schedule
-model = PPO("MlpPolicy", env, verbose=1, tensorboard_log="./ppo_ant_tensorboard/", learning_rate=linear_lr)
+model = SAC("MlpPolicy", env, verbose=1, tensorboard_log="./ppo_human_tensorboard/", learning_rate=linear_lr)
 
 # Load the model
 try:
-    model.load("./models/ant")
+    model.load("./models/human")
 except Exception as e:
     print(e)
     print("Starting a new model")
 
 # Train the model
 experiment_name = f"enc{env.numFeatures}"
-model.learn(total_timesteps=100_000, tb_log_name=f"{experiment_name}")
+model.learn(total_timesteps=1_000, tb_log_name=f"{experiment_name}")
 
 # Save the model
 now = datetime.datetime.now().strftime("%Y%m%d_%H%M")

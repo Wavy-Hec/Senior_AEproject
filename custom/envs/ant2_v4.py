@@ -4,6 +4,7 @@ from gym import utils
 from gym.envs.mujoco import MujocoEnv
 from gym.spaces import Box
 from tensorflow.keras.models import load_model
+from keras.models import Model
 
 DEFAULT_CAMERA_CONFIG = {
     "distance": 4.0,
@@ -319,7 +320,7 @@ class Ant2Env(MujocoEnv, utils.EzPickle):
                 print("squeezing!")
                 self.squeezer = load_model(f'Encoder/AE_{numFeatures}')
                 obs_shape = numFeatures
-            elif .. 'PCA'
+           # elif .. 'PCA'
         
         self.numFeatures = numFeatures
 

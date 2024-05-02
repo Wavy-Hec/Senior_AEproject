@@ -2,6 +2,14 @@
 __pycache__/
 *.py[cod]
 *$py.class
+CustomPCA/
+figs/
+logs/
+ppo_ant_tensorboard/
+ppo_human_tensorboard/
+ppo_PCA_ant_tensorboard_lr1/
+Trainings_Tuner/
+
 
 # C extensions
 *.so
