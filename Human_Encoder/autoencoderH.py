@@ -8,11 +8,17 @@ from keras.models import Model
 
 import gymnasium as gym
 from stable_baselines3 import SAC
+
 import torch
-import matplotlib.pyplot as plt
 
+import datetime;
 
-env = gym.make("Humanoid-v4", render_mode="human")
+TOTAL_OBS = 376
+START = 375
+SHRINK_BY = 25
+GENERATE = 1000000
+
+env = gym.make("Humanoid-v4", render_mode="rgb_array")
 model = SAC.load("SAC_2000000.zip", env=env)
 
 
@@ -22,7 +28,7 @@ obs_arr = np.array(env.reset()[0], dtype=np.double)
 obs = env.reset()
 
 #train for longer/get better model
-for x in range(5000):
+for x in range(GENERATE):
     obs, _, done, _, _ = env.step(env.action_space.sample())
     obs_arr = np.append(obs_arr, obs)
     if done:
@@ -30,13 +36,12 @@ for x in range(5000):
   
 
 
-obs_arr = np.reshape(obs_arr, (-1, 376) )
+obs_arr = np.reshape(obs_arr, (-1, TOTAL_OBS) )
 
 
 loader = torch.utils.data.DataLoader(dataset=obs_arr, batch_size=32, shuffle=True)
 
 
-import matplotlib.pyplot as plt
 
 
 np.random.shuffle(obs_arr)
@@ -45,8 +50,7 @@ np.random.shuffle(obs_arr)
 x_train = obs_arr[:int(obs_arr.shape[0]*.8)]
 x_test = obs_arr[int(obs_arr.shape[0]*.8):]
 
-# x_train = obs_arr[:int(theRange*.8)]
-# x_test = obs_arr[int(theRange*.8):]
+
 
 print("train and test")
 print(x_train.shape, x_test.shape)
@@ -88,50 +92,52 @@ class SimpleAutoencoder(Model):
 		return decoded_data
 
 
-# Extracting shape information from the testing dataset
-input_data_shape = x_test.shape[1:]
-
+latent_dimensions = START
+graphArr = []
 # Specifying the dimensionality of the latent space
-latent_dimensions = 200
 
+
+while latent_dimensions > 0:
+
+
+# Extracting shape information from the testing dataset
+	input_data_shape = x_test.shape[1:]
 
 # Creating an instance of the SimpleAutoencoder model
-simple_autoencoder = SimpleAutoencoder(latent_dimensions, input_data_shape)
-
+	simple_autoencoder = SimpleAutoencoder(latent_dimensions, input_data_shape)
 
 #losses.MeanSquaredError()
-simple_autoencoder.compile(optimizer='adam', loss=losses.MeanAbsoluteError())
+	simple_autoencoder.compile(optimizer='adam', loss=losses.MeanAbsoluteError())
 
-graph = simple_autoencoder.fit(x_train, x_train,
-				epochs=500,
-				shuffle=True,
-				validation_data=(x_test, x_test))
+	graphArr.append( simple_autoencoder.fit(x_train, x_train, epochs=10000, shuffle=True, validation_data=(x_test, x_test)) )
 
+	latent_dimensions -= SHRINK_BY
 
 encoded_imgs = simple_autoencoder.encoder(x_test).numpy()
 decoded_imgs = simple_autoencoder.decoder(encoded_imgs).numpy()
 
 
-import datetime;
 
-plt.plot(graph.history['loss'], label='Training Loss')
+latent_dimensions = START
+
+for x in graphArr:
+	
+	
+	plt.plot(x.history['loss'], label=latent_dimensions)
+	latent_dimensions -= SHRINK_BY
+
 
 
 plt.title('Autoencoder Loss')
 plt.xlabel('Epoch')
 plt.ylabel('Loss')
 plt.legend()
-plt.show()
-
-#saving the model
-# now = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-# newFile = open(f"./savedModels/{now}", 'a')
-
-# for i in encoded_imgs:
-# 	newFile.write(str(i))
+plt.savefig(f'loss_{START}-{SHRINK_BY}({GENERATE}).png')
 
 
-simple_autoencoder.save(f'savedModels/HAE_990Rwrd_500E_{latent_dimensions}',save_format='tf')
+
+
+simple_autoencoder.save(f'model_{START}-{SHRINK_BY}({GENERATE})',save_format='tf')
 
 
 
