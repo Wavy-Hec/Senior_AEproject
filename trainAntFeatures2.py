@@ -5,23 +5,6 @@ import datetime
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from stable_baselines3.common.utils import set_random_seed
 
-# Multiprocessing for envs. Sourced from SB3: https://stable-baselines3.readthedocs.io/en/master/guide/examples.html
-def make_env(env_id: str, numFeatures: int = 27, squeezerType: str = 'AE', rank: int = 0, seed: int = 0):
-    """
-    Utility function for multiprocessed env.
-
-    :param env_id: the environment ID
-    :param num_env: the number of environments you wish to have in subprocesses
-    :param seed: the inital seed for RNG
-    :param rank: index of the subprocess
-    """
-    def _init():
-        env = gym.make(env_id, render_mode="rgb_array")
-        env.reset(seed=seed + rank)
-        return env
-    set_random_seed(seed)
-    return _init
-
 # Learning rate schedule: linearly decreasing from 0.0007 to 0.0001
 def linear_lr(progress_remaining: float):
     start_lr = 0.0007
@@ -32,7 +15,7 @@ def linear_lr(progress_remaining: float):
 # numCpus should be set by device
 numCpus = 10
 # experiments = [27] + list(range(26, 0, -2)) + [1]
-experiments = [1, 2, 4] #first half of experiments
+experiments = [8, 16, 27] # second half of experiments
 
 if __name__ == "__main__":
     for x in experiments:

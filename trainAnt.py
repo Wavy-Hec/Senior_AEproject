@@ -15,7 +15,7 @@ def linear_lr(progress_remaining: float):
     return end_lr + (start_lr - end_lr) * progress_remaining
 
 # Initialize the PPO model with the learning rate schedule
-model = PPO("MlpPolicy", env, verbose=1, tensorboard_log="./ppo_ant_tensorboard/", learning_rate=linear_lr)
+model = PPO("MlpPolicy", env, verbose=1, tensorboard_log="logs/ant_tb/", learning_rate=linear_lr)
 
 # Load the model
 try:
@@ -25,8 +25,8 @@ except Exception as e:
     print("Starting a new model")
 
 # Train the model
-experiment_name = f"enc{env.numFeatures}"
-model.learn(total_timesteps=100_000, tb_log_name=f"{experiment_name}")
+experiment_name = f"AEenc{env.numFeatures}"
+model.learn(total_timesteps=1_000, tb_log_name=f"{experiment_name}")
 
 # Save the model
 now = datetime.datetime.now().strftime("%Y%m%d_%H%M")
@@ -37,9 +37,9 @@ vec_env = model.get_env()
 obs = vec_env.reset()
 
 for i in range(10_000):  # loop simulating 10000 timesteps
-    action, _states = model.predict(obs, deterministic=True)
+    action, _ = model.predict(obs, deterministic=True)
     obs, rewards, done, info = vec_env.step(action)
 
-    vec_env.render("human")
+    # vec_env.render("human") # Skip rendering 
     if done:
         obs = vec_env.reset()

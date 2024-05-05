@@ -4,7 +4,6 @@ from gym import utils
 from gym.envs.mujoco import MujocoEnv
 from gym.spaces import Box
 from tensorflow.keras.models import load_model
-from keras.models import Model
 
 DEFAULT_CAMERA_CONFIG = {
     "distance": 4.0,
@@ -14,9 +13,13 @@ import tensorflow as tf
 from keras import layers, losses
 from keras.models import Model
 
-
+#For PCA and kbest methods
+import pickle as pk
+from sklearn.decomposition import PCA
+from sklearn.feature_selection import SelectKBest
+#from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 # Definition of the Autoencoder model as a subclass of the TensorFlow Model class
-
 
 
 
@@ -259,15 +262,18 @@ class Ant2Env(MujocoEnv, utils.EzPickle):
         ctrl_cost_weight=0.5,
         use_contact_forces=False,
         contact_cost_weight=5e-4,
-        healthy_reward=0.5, # ERIK - original reward was 1.0, we can tune
+        healthy_reward=1, # ERIK - original reward was 1.0, we can tune
         terminate_when_unhealthy=True,
         healthy_z_range=(0.2, 1.0),
         contact_force_range=(-1.0, 1.0),
         reset_noise_scale=0.1,
         exclude_current_positions_from_observation=True,
-        squeezer=False, #maually squeeze data if custom enviroment doesnt work
-        squeezerType='AE',
+        squeezer=True, #maually squeeze data if custom enviroment doesnt work
         numFeatures=26, #squeeze from 26 and so on manaully
+        pca_file=None, #File status
+        kbest_file=None,
+        pca_num_features=None, #Features for pca and kbest
+        kbest_num_features=None, 
         **kwargs
     ):
         utils.EzPickle.__init__(
@@ -316,11 +322,9 @@ class Ant2Env(MujocoEnv, utils.EzPickle):
         
         # squeezer
         if squeezer:
-            if squeezerType == "AE":
-                print("squeezing!")
-                self.squeezer = load_model(f'Encoder/AE_{numFeatures}')
-                obs_shape = numFeatures
-           # elif .. 'PCA'
+            print("squeezing!")
+            # self.squeezer = load_model(f'Encoder/AE_{numFeatures}') # remove since we dont have AE files, thanks Hector.
+            obs_shape = numFeatures
         
         self.numFeatures = numFeatures
 
@@ -334,6 +338,24 @@ class Ant2Env(MujocoEnv, utils.EzPickle):
 
         self.epi_steps = 0
         self.max_steps = 1000
+
+
+        #Loading PCA and kbest
+        #Load PCA from pickle file
+        if pca_file:
+            self.pca = pk.load(open(pca_file, 'rb'))
+            self.num_features = pca_num_features
+        else:
+            self.pca = None
+            self.num_features = None
+        
+        #Load SelectKBest from pickle file
+        if kbest_file:
+            self.kbest = pk.load(open(kbest_file, 'rb'))
+            self.num_features = kbest_num_features
+        else:
+            self.kbest = None
+            self.num_features = None
 
     @property
     def healthy_reward(self):
@@ -418,6 +440,9 @@ class Ant2Env(MujocoEnv, utils.EzPickle):
         
         return observation, reward, terminated, False, info
 
+
+
+
     def _get_obs(self):
         position = self.data.qpos.flat.copy()
         velocity = self.data.qvel.flat.copy()
@@ -434,11 +459,37 @@ class Ant2Env(MujocoEnv, utils.EzPickle):
 
         # use some compression model to squeeze the output down to numFeatures
         # EX: obs = pca.transform(obs)
-        if self.squeezer:
+        if self.squeezer == 'AE':
             obs = np.reshape(obs, (1,27))
             obs = self.squeezer.encoder(obs).numpy()
             obs = np.reshape(obs, (self.numFeatures,))
 
+        # # Apply StandardScaler if needed
+        # if self.observation_pipeline:
+        #     obs = StandardScaler().fit_transform(obs.reshape(1, -1))
+# '''
+#         elif self.pca:
+#             obs = self.pca.transform([obs])
+
+#         # Apply SelectKBest transformation if it is loaded
+#         if self.kbest:
+#             # obs = np.reshape(obs, (1,27))
+#             # obs = self.kbest.transform(obs)
+#             # obs = np.reshape(obs, (self.numFeatures,))
+
+#             obs = self.kbest.transform(obs)
+#             obs = np.reshape(obs, (self.numFeatures,))
+# '''            
+        
+        elif self.pca:
+            obs = self.pca.transform([obs])
+
+        # Apply SelectKBest transformation if it is loaded
+        if self.kbest:
+            obs = self.kbest.transform([obs])
+
+        ##return obs.ravel()
+        #print("Observation shape:", obs.shape)
         return obs
 
     def reset_model(self):
@@ -469,16 +520,16 @@ class Ant2Env(MujocoEnv, utils.EzPickle):
 
 
 
-# Debug test block - you can remove this whenever
+# # Debug test block - you can remove this whenever
 # from stable_baselines3.ppo import PPO
 
-# Instantiate the env
-# env = CustomAntEnv()
-# # Define and Train the agent
+# # Instantiate the env
+# env = Ant2Env(numFeatures=13, pca_file='custom\pca_13.pkl', squeezer='pca')
+# # # Define and Train the agent
 # model = PPO("MlpPolicy", env, verbose=1, tensorboard_log='logs/')
 
 # print("Training started")
-# model.learn(total_timesteps=10000, tb_log_name='test5')
+# model.learn(total_timesteps=100, tb_log_name='test5')
 # print("Training completed")
 
 # vec_env = model.get_env()
@@ -488,11 +539,41 @@ class Ant2Env(MujocoEnv, utils.EzPickle):
 #     action, _states = model.predict(obs)
 #     obs, rewards, done, truncated, info = env.step(np.reshape(action, (8,)))
 
-#     env.render(mode='rgb_array')
+#     # env.render()
 
 
 #     if done:
 #         print(rewards)
 #         obs = vec_env.reset()  # Reset environment to start a new episode
 
+
+import gym
+from stable_baselines3 import PPO
+import datetime
+import numpy as np
+
+
+experiments = [27]
+experiments.extend(list(range(26, 0, -2)))
+experiments.append(1)
+
+for x in experiments:
+    for i in range(10):
+        env = Ant2Env(numFeatures=x, kbest_file=f'CustomKBest/k_best_{x}.pkl', squeezer='kbest')
+        # Learning rate schedule: linearly decreasing from 0.0007 to 0.0001
+        def linear_lr(progress_remaining: float):
+            start_lr = 0.0007
+            end_lr = 0.0002
+            return end_lr + (start_lr - end_lr) * progress_remaining
+
+        # Initialize the PPO model with the learning rate schedule
+        model = PPO("MlpPolicy", env, verbose=1, tensorboard_log="./ppo_kbest_ant_tensorboard_lr1/", learning_rate=linear_lr)
+
+        # Train the model
+        experiment_name = f"enc{env.numFeatures}-hr1" # hr is "healthy reward"
+        model.learn(total_timesteps=1_000_000, tb_log_name=f"{experiment_name}")
+
+        # Save the model
+        now = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+        model.save(f".kbest/models/{experiment_name}_{now}")
 
